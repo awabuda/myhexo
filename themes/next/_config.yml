@@ -746,8 +746,6 @@ vendors:
   # Internal version: 1.9.7
   # See: https://github.com/tuupola/jquery_lazyload
   lazyload:
-    enable: true
-    onlypost: false
   # Internal version: 1.2.1
   # See: http://VelocityJS.org
   velocity:
