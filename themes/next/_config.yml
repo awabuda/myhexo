@@ -155,7 +155,7 @@ links_layout: block
 # in theme directory(source/images): /images/avatar.gif
 # in site  directory(source/uploads): /uploads/avatar.gif
 #avatar: /images/avatar.gif
-avatar: https://wx.qlogo.cn/mmopen/vi_32/DYAIOgq83ephSosZHM1sIYSCkn8yoCgmbaWQppkUsJ3SmpvWohsib0kTjOOgfIQiaibDh2iciaITYdHTYY4USZl8p9Q/132
+avatar: /images/avatar.gif
 # Table Of Contents in the Sidebar
 toc:
   enable: true
@@ -746,7 +746,8 @@ vendors:
   # Internal version: 1.9.7
   # See: https://github.com/tuupola/jquery_lazyload
   lazyload:
-
+    enable: true
+    onlypost: false
   # Internal version: 1.2.1
   # See: http://VelocityJS.org
   velocity:
@@ -815,3 +816,11 @@ images: images
 
 # Theme version
 version: 5.1.4
+
+# hexo-tag-cloud 标签云 | see https://github.com/MikeCoder/hexo-tag-cloud
+tag_cloud:
+  textFont: Trebuchet MS, Helvetica # 字体
+  textColor: '#555' # 字体颜色
+  textHeight: 25 # 字体高度
+  outlineColor: '#E2E1D1' # 字体背景色
+  maxSpeed: 0.1 # 标签云最大移动速度

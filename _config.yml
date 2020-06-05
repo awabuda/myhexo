@@ -99,11 +99,14 @@ theme: next
 ## Docs: https://hexo.io/docs/deployment.html
 deploy:
   type: 'git'
-  repo: http://github.com/awabuda/awabuda.github.io.git
+  repo: git@github.com:awabuda/awabuda.github.io.git
 
 search:
   path: search.xml
   field: post
   format: html
   limit: 10000
-
+#侧栏 时钟
+diy_clock:
+ clock: true
+ runtime: true
