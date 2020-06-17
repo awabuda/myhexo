@@ -96,7 +96,7 @@ menu:
   about: /about||user  #在菜单上显示 关于
   tags: /tags||tags #在菜单上显示 标签
   categories: /categories||th  #在菜单上显示 分类
-
+  archives: /archives||archive
 # Enable/Disable menu icons.
 menu_icons:
   enable: true
@@ -139,8 +139,8 @@ social:
 social_icons:
   enable: true
   GitHub: github
-  icons_only: false
-  transition: false
+  icons_only: true
+  transition: true
 
 # Blog rolls
 #友情链接
@@ -584,7 +584,7 @@ baidu_push: false
 # API Documentation:
 # https://developers.google.com/google-apps/calendar/v3/reference/events/list
 calendar:
-  enable: false
+  enable: true
   calendar_id: <required>
   api_key: <required>
   orderBy: startTime
@@ -822,3 +822,8 @@ tag_cloud:
   textHeight: 25 # 字体高度
   outlineColor: '#E2E1D1' # 字体背景色
   maxSpeed: 0.1 # 标签云最大移动速度
+
+# 侧栏粒子时钟
+diy_clock:
+  clock: true # 粒子时钟
+  runtime: true 

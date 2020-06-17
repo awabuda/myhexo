@@ -108,5 +108,5 @@ search:
   limit: 10000
 #侧栏 时钟
 diy_clock:
- clock: true
- runtime: true
+  clock: true
+  runtime: true

@@ -25,20 +25,7 @@
           </li>
         </ul>
       {% endif %}
-      {% if site.tags.length > 1 %}
-        <script type="text/javascript" charset="utf-8" src="{{ url_for('/js/tagcloud.js') }}"></script>
-        <script type="text/javascript" charset="utf-8" src="{{ url_for('/js/tagcanvas.js') }}"></script>
-        <div class="widget-wrap">
-            <div id="myCanvasContainer" class="widget tagcloud">
-            <canvas width="220" height="250" id="resCanvas" style="width=100%">
-                {{ list_tags() }}
-            </canvas>
-            </div>
-        </div>
-        {% endif %}
-      {%- if theme.diy_clock.clock %}
-      {%- include '../_custom/clock.swig' %}
-      {%- endif %}
+     
       <section class="site-overview-wrap sidebar-panel{% if not display_toc or toc(page.content).length <= 1 %} sidebar-panel-active{% endif %}">
         <div class="site-overview">
           <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -182,6 +169,21 @@
           {% endif %}
         </div>
       {% endif %}
+      {% if site.tags.length > 1 %}
+      <script type="text/javascript" charset="utf-8" src="{{ url_for('/js/tagcloud.js') }}"></script>
+      <script type="text/javascript" charset="utf-8" src="{{ url_for('/js/tagcanvas.js') }}"></script>
+      <div class="widget-wrap">
+          <div id="myCanvasContainer" class="widget tagcloud">
+          <canvas width="220" height="250" id="resCanvas" style="width=100%">
+              {{ list_tags() }}
+          </canvas>
+          </div>
+      </div>
+      {% endif %}
+      {%- if theme.diy_clock.clock %}
+        {%- include '../_custom/clock.swig' %}
+      {%- endif %}
+
 
     </div>
   </aside>

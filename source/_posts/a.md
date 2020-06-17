@@ -6,4 +6,7 @@ type: tags
 tags:
   - test
   - auto
+categories:
+  - node
+    - koa2
 ---

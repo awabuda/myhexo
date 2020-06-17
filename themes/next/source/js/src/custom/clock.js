@@ -1,4 +1,6 @@
 (function () {
+  console.error(111)
+
   var digit =
     [
       [
@@ -136,7 +138,6 @@
     ];
 
   var canvas = document.getElementById('canvasDiyBlock');
-
   if (canvas.getContext) {
     var cxt = canvas.getContext('2d');
     //声明canvas的宽高
