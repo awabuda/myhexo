@@ -174,7 +174,7 @@
       <script type="text/javascript" charset="utf-8" src="{{ url_for('/js/tagcanvas.js') }}"></script>
       <div class="widget-wrap">
           <div id="myCanvasContainer" class="widget tagcloud">
-          <canvas width="220" height="250" id="resCanvas" style="width=100%">
+          <canvas width="110" height="140" id="resCanvas" style="width=100%">
               {{ list_tags() }}
           </canvas>
           </div>

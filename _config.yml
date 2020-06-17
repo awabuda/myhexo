@@ -4,9 +4,9 @@
 
 # Site
 title: 悟凌斋
-subtitle: ''
+subtitle: '一行代码翘起整个前端'
 description: '回忆是一座桥,却是通往寂寞的路'
-keywords:
+keywords: 博客,js,前端,node,vue,react,koa,算法,css
 author: awabuda
 language: zh-Hans
 timezone: ''
@@ -110,3 +110,17 @@ search:
 diy_clock:
   clock: true
   runtime: true
+live2d:
+  enable: true
+  scriptFrom: local
+  pluginRootPath: live2dw/
+  pluginJsPath: lib/
+  pluginModelPath: assets/
+  model:
+    use: live2d-widget-model-wanko
+  display:
+    position: right
+    width: 150
+    height: 300
+  mobile:
+    show: true
