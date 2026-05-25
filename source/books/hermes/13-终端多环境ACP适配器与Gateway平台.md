@@ -1,3 +1,14 @@
+---
+title: 十三、终端多环境ACP适配器与Gateway平台
+permalink: /books/hermes/13-终端多环境ACP适配器与Gateway平台/
+comments: false
+prev: 12-智能路由凭据池与错误恢复
+next: 14-工程师为什么这么做
+prev_title: 十二、智能路由凭据池与错误恢复
+next_title: 十四、工程师为什么这么做
+---
+
+
 # 十三、终端多环境、ACP 适配器与 Gateway 平台（待验证）
 
 > **结论先行**：Hermes 通过三套扩展机制实现"无处不在"的 Agent 能力。**终端多环境**：`terminal()` 工具调用接口不变，底层自动路由到 local/docker/ssh/modal 等 6 种执行后端；**ACP 适配器**：通过 Agent Communication Protocol 接入 VS Code/Zed/JetBrains 等编辑器，变身代码 AI Agent；**Gateway 平台**：将 Hermes 接入 Telegram/Discord/Slack 等 15 个消息平台，每会话缓存 AIAgent 实例保留 Prompt 缓存，避免每条消息重建 Agent 带来的 10x 费用。
@@ -72,7 +83,68 @@ terminal("python server.py", background=True, check_interval=30)
 
 ### 架构
 
-*[嵌入图表]*
+```mermaid
+sequenceDiagram
+
+
+    participant E as VS Code / Zed 编辑器
+
+
+    participant A as acp_adapter/server.py
+
+
+    participant S as SessionManager
+
+
+    participant H as AIAgent
+
+
+
+
+    E->>A: ACP initialize()
+
+
+    A->>A: 检测 Provider（Anthropic/OpenAI...）
+
+
+    A-->>E: AgentCapabilities + 可用命令列表
+
+
+
+
+    E->>A: ACP new_session()
+
+
+    A->>S: 创建 SessionState（含新 AIAgent）
+
+
+    S-->>A: session_id
+
+
+
+
+    E->>A: ACP run(prompt="帮我重构这个函数")
+
+
+    A->>H: run_conversation(user_message)
+
+
+    loop ReAct 循环
+
+
+        H->>A: step_callback（工具执行进度）
+
+
+        A-->>E: 流式推送进度事件
+
+    end
+
+    H-->>A: final_response
+
+    A-->>E: 完成
+
+
+```
 
 ### 会话管理
 
@@ -145,7 +217,75 @@ def _get_or_create_agent(self, session_key, config) -> AIAgent:
 
 ### Gateway 消息处理完整链路
 
-*[嵌入图表]*
+```mermaid
+sequenceDiagram
+
+
+    participant U as 用户（Telegram/Discord）
+
+
+    participant P as 平台适配器
+
+
+    participant G as GatewayRunner
+
+
+    participant A as AIAgent（缓存）
+
+
+    participant DB as SessionDB（SQLite）
+
+
+
+
+    U->>P: 发送消息 "帮我查一下天气"
+
+
+    P->>G: on_message(event)
+
+
+    G->>G: build_session_key(platform, chat_id, user_id)
+
+
+    G->>G: 检查是否为斜杠命令（/help、/reset 等）
+
+
+    G->>A: _get_or_create_agent(session_key)
+
+
+    note over A: 复用缓存 → Prompt 缓存有效
+
+
+    G->>DB: load_transcript(session_id) 加载对话历史
+
+
+    G->>A: run_conversation(user_msg, conversation_history)
+
+
+    loop ReAct 循环
+
+
+        A->>G: tool_progress_callback（工具进度）
+
+
+        G->>P: 推送进度消息（可选）
+
+
+    end
+
+
+    A-->>G: final_response
+
+
+    G->>DB: save_turn(messages)
+
+
+    G->>P: send_reply(final_response)
+
+
+    P->>U: 回复消息
+
+```
 
 ## 13.5 Cron 定时任务
 

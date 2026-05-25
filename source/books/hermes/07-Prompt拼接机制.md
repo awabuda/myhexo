@@ -1,3 +1,14 @@
+---
+title: 七、Prompt拼接机制
+permalink: /books/hermes/07-Prompt拼接机制/
+comments: false
+prev: 06-上下文压缩
+next: 08-子Agent委托
+prev_title: 六、上下文压缩
+next_title: 八、子Agent委托
+---
+
+
 # 七、Prompt 拼接机制
 
 `_build_system_prompt()` 是 Hermes 中最重要的"一次性"操作，也是整个 Agent 架构中与成本最直接相关的设计决策。
@@ -10,11 +21,85 @@
 
 ## System Prompt 构建全流程
 
-*[嵌入图表]*
+```mermaid
+flowchart TD
+    A["run_conversation() 入口"] --> B{self._cached_system_prompt\nis None?}
+
+    B -->|否，已有缓存| C["直接复用\n本轮不重建"]
+
+    B -->|是，需要构建| D{有 conversation_history\n且有 session_db?}
+
+    D -->|是，续接会话| E["从 SQLite 读取\nsession_row['system_prompt']"]
+    E --> F{读取成功?}
+    F -->|是| G["复用已存快照\n✅ Anthropic 缓存对齐"]
+    F -->|否| H
+
+    D -->|否，新会话首轮| H["_build_system_prompt()\n7层拼接"]
+
+    H --> I["快照写入 SQLite\nsession_db.update_system_prompt()"]
+    I --> J["触发 on_session_start 钩子\n（仅新会话，不含续接）"]
+
+    G --> K["self._cached_system_prompt = 结果"]
+    J --> K
+    C --> L["active_system_prompt\n用于本轮 API 调用"]
+    K --> L
+```
 
 ## System Prompt N 层结构
 
-*[嵌入图表]*
+```mermaid
+flowchart TD
+    SP["System Prompt（最终拼接结果）"]
+
+    SP --> L1
+    SP --> L2
+    SP --> L3
+    SP --> L4
+    SP --> L5
+    SP --> L6
+    SP --> L7
+
+    subgraph L1["第 1 层：Agent 身份（必有）"]
+        L1A{存在 ~/.hermes/soul.md?}
+        L1A -->|是| L1B["读取 SOUL.md\n用户自定义 AI 人格/角色"]
+        L1A -->|否| L1C["DEFAULT_AGENT_IDENTITY\n默认身份描述"]
+    end
+
+    subgraph L2["第 2 层：工具行为引导（动态，按工具可用性注入）"]
+        BPAD[ ]:::hidden
+        L2A["memory 工具已加载 → MEMORY_GUIDANCE\n'Use the memory tool to...'"]
+        L2B["skill_manage 已加载 → SKILLS_GUIDANCE\n'After complex tasks, save as skill...'"]
+        L2C["session_search 已加载 → SESSION_SEARCH_GUIDANCE"]
+        L2D["Gemini/GPT 等模型 → TOOL_USE_ENFORCEMENT_GUIDANCE\n部分模型只描述不执行，需要强制引导"]
+    end
+
+    subgraph L3["第 3 层：用户/平台 System Message（可选）"]
+        direction LR
+        BPAD[ ]:::hidden
+        L3A["外部调用时传入的自定义 system_message\n例：'You are a code review assistant...'"]
+    end
+
+    subgraph L4["第 4 层：持久记忆（冻结快照）"]
+        BPAD[ ]:::hidden
+        L4A["MEMORY.md 全文\n包裹在 XML 标签 <hermes-memory>"]
+        L4B["USER.md 全文\n包裹在 <user-profile>"]
+        L4C["外置 Memory 插件摘要\n（如果安装了 Mem0/Honcho 等）"]
+    end
+
+    subgraph L5["第 5 层：技能索引（渐进式披露）"]
+        BPAD[ ]:::hidden
+        L5A["扫描 ~/.hermes/skills/ 的 SKILL.md frontmatter\n只放 name + description（摘要）\n完整内容不在这里，按需 skill_view 加载"]
+    end
+
+    subgraph L6["第 6 层：上下文文件（项目规范）"]
+        BPAD[ ]:::hidden
+        L6A["从当前工作目录向上查找至 git root\nAGENTS.md / .hermes.md / .cursorrules / CLAUDE.md\n若已有 SOUL.md 则跳过（避免重复）"]
+    end
+
+    subgraph L7["第 7 层：元信息"]
+        L7A["当前日期时间（构建时冻结）\nSession ID / 模型名\n平台格式提示（cli/telegram/discord）"]
+    end
+```
 
 ## System Prompt 逐层解析（实例分析）
 
@@ -265,7 +350,25 @@ api_messages（最终发送给 Anthropic 的版本）：
 
 每次 LLM 调用前，在 `api_messages`（messages 的临时副本）上还会叠加动态内容，**但绝不修改原始 messages 列表**：
 
-*[嵌入图表]*
+```mermaid
+flowchart LR
+    A["messages\n（持久化对话历史）"] --> B["构建 api_messages\n（临时副本）"]
+
+    subgraph B["api_messages 构建过程"]
+        direction TB
+        B1["对每条消息构建副本\n删除内部字段：\nreasoning / finish_reason / extra_content"]
+        B2["保留 reasoning_details\n（多轮推理连续性，某些 provider 需要）"]
+        B3["当前轮 user 消息末尾追加：\n① 外置记忆 prefetch 结果\n② nudge 提示（记忆/技能建议）"]
+        B4["头部插入 system prompt：\nself._cached_system_prompt\n+ ephemeral_system_prompt（临时注入）"]
+        B5["中间插入 prefill_messages\n（few-shot 示例，如 thinking 模板）"]
+    end
+
+    B --> C["apply_anthropic_cache_control()\n注入 4 个 cache_control 断点"]
+    C --> D["_sanitize_api_messages()\n修复孤儿 tool 结果"]
+    D --> E["发送给 LLM API"]
+
+    A -. "不修改原始列表" .-> A
+```
 
 ## FAQ
 

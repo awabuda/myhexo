@@ -1,3 +1,14 @@
+---
+title: 九、MCP客户端集成
+permalink: /books/hermes/09-MCP客户端集成/
+comments: false
+prev: 08-子Agent委托
+next: 10-危险命令审批与检查点回滚
+prev_title: 八、子Agent委托
+next_title: 十、危险命令审批与检查点回滚
+---
+
+
 # 九、MCP 客户端集成（待验证）
 
 ## 9.1 为什么需要 MCP？
@@ -8,7 +19,28 @@ Hermes 内置工具固定在代码里，难以动态扩展。MCP 提供了标准
 
 ## 9.2 从配置到工具调用的完整流程
 
-*[嵌入图表]*
+```mermaid
+sequenceDiagram
+    participant Y as config.yaml
+    participant H as Hermes 启动
+    participant B as MCP 后台线程
+    participant R as tools.registry
+    participant A as AIAgent 工具调用
+
+    H->>Y: 读取 mcp_servers 配置
+    H->>B: 启动专属 daemon 线程 + asyncio EventLoop
+    loop 每个 MCP 服务器
+        B->>B: 启动长驻 asyncio Task
+        B->>B: stdio: 启动子进程<br/>http: 建立 HTTP 连接
+        B->>R: session.list_tools() 注册工具
+        note over R: name = "github__create_pr"<br/>toolset = "mcp_github"
+    end
+    note over A: LLM 决策调用 github__create_pr
+    A->>R: registry.dispatch("github__create_pr", args)
+    R->>B: run_coroutine_threadsafe(call_tool, _mcp_loop)
+    B->>B: session.call_tool("create_pr", args)
+    B-->>A: 工具结果（JSON）（）（）
+```
 
 ## 9.3 两种传输模式
 

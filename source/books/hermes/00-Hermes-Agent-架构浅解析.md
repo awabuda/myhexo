@@ -1,3 +1,12 @@
+---
+title: 零、Hermes Agent 架构浅解析
+permalink: /books/hermes/00-Hermes-Agent-架构浅解析/
+comments: false
+next: 01-整体架构概览
+next_title: 一、整体架构概览
+---
+
+
 # Hermes Agent 架构浅解析
 
 本文档对 Hermes Agent 的整体架构进行系统性梳理，涵盖 Agent 核心实现、工具注册与调用、技能系统、三层记忆架构、上下文工程以及 Prompt 拼接机制。

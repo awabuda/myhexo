@@ -1,4 +1,14 @@
-# 二、Agent 核心实现
+---
+title: 二、Agent核心实现
+permalink: /books/hermes/02-Agent核心实现/
+comments: false
+prev: 01-整体架构概览
+next: 03-工具系统-注册发现与调用
+prev_title: 一、整体架构概览
+next_title: 三、工具系统-注册发现与调用
+---
+
+
 
 # 二、Agent 核心实现：一条消息的完整生命周期
 
@@ -26,7 +36,55 @@ def run_conversation(self, user_message, conversation_history=None, task_id=None
 
 下图展示了一条用户消息从进入到生成回复的完整链路：
 
-*[嵌入图表]*
+```mermaid
+flowchart TD
+    A["用户输入\n帮我分析 app.py 的性能问题"] --> B
+
+    subgraph B["① 入口处理run_conversation()"]
+        direction LR
+        BPAD[ ]:::hidden
+        B1[清洗 surrogate 字符] --> B2[重置重试计数器]
+        B2 --> B3[复制 history 到 messages]
+        B3 --> B4[恢复 todo_store]
+        B4 --> B5["messages.append(user_msg)"]
+    end
+
+    B --> C
+
+    subgraph C["② System Prompt 构建（整个 session 只做一次）"]
+        C1{是否有缓存?} -->|有 cached_system_prompt| C2[直接复用]
+        C1 -->|无，从 SQLite 读存储快照| C3{存储中有吗?}
+        C3 -->|有| C4[从 SQLite 恢复\n保证 Anthropic 缓存对齐]
+        C3 -->|无，首次新会话| C5["_build_system_prompt()\n7层拼接"]
+        C5 --> C6[快照写入 SQLite]
+    end
+
+    C --> D["③ 预检上下文\n估算 token 数，超阈值立即压缩"]
+
+    D --> E["④ Memory Prefetch（整轮只做一次）\n外置记忆按语义 recall，结果缓存"]
+
+    E --> F
+
+    subgraph F["⑤ ReAct 主循环\nwhile iteration_budget.remaining > 0"]
+        F1["组装 api_messages\n（不修改原始 messages）"] --> F2
+        F2["注入 Prompt Cache 断点\napply_anthropic_cache_control()"] --> F3
+        F3["合法性清洗\n修复孤儿 tool 结果"] --> F4
+        F4["调用 LLM\n_interruptible_api_call()"] --> F5{有 tool_calls?}
+        F5 -->|YES 执行工具| F6["_execute_tool_calls()\n并行/串行决策"]
+        F6 --> F7["追加 tool 结果到 messages"]
+        F7 --> F8{token 超阈值?}
+        F8 -->|是| F9["_compress_context()\n中部摘要压缩"]
+        F9 --> F1
+        F8 -->|否| F1
+        F5 -->|NO 最终回复| F10[退出循环]
+    end
+
+    F10 --> G["⑥ 循环后处理"]
+    G --> G1[flush_memories 写记忆]
+    G1 --> G2[保存轨迹文件]
+    G2 --> G3["持久化 session\nJSON 日志 + SQLite"]
+    G3 --> H["返回 final_response"]
+```
 
 ---
 
@@ -82,7 +140,44 @@ messages 列表（OpenAI 格式）：
 
 ### System Prompt 7 层结构
 
-*[嵌入图表]*
+```mermaid
+graph TD
+    subgraph INIT["AIAgent.__init__() — 会话初始化"]
+        TOOLS["工具加载\nget_tool_definitions()\nvalid_tool_names填充完毕"]
+        BUILD["_build_system_prompt()\n构建 _cached_system_prompt\n整个会话冻结"]
+        TOOLS --> BUILD
+    end
+
+    subgraph CACHED["_cached_system_prompt（会话级冻结，压缩时唯一重建机会）"]
+        L1["① 身份层\nSOUL.md（~/.hermes/SOUL.md，用户自定义）\n不存在则fallback → DEFAULT_AGENT_IDENTITY"]
+
+        L2["② 工具行为引导（条件注入，非动态刷新）\n有memory工具 → MEMORY_GUIDANCE\n有 session_search → SESSION_SEARCH_GUIDANCE\n有 skill_manage → SKILLS_GUIDANCE\n─────────────────────\n工具调用强制引导（条件注入）\n valid_tool_names 非空 + 模型名匹配\n Gemini/Gemma →额外 GOOGLE_MODEL_OPERATIONAL_GUIDANCE\n GPT/Codex → 额外 OPENAI_MODEL_EXECUTION_GUIDANCE\n─────────────────────\nNous 订阅说明（可选）\n仅 managed_nous_tools_enabled() = True 时出现"]
+
+        L3["③ 自定义 system_message（可选）\nrun_conversation(system_message=...) 传入时追加\n不传则整层跳过\n（注意：此层会覆盖 ephemeral_system_prompt 的效果）"]
+
+        L4["④ 持久记忆（冻结快照）\nMEMORY.md 全文（上限 2200 字符）\nUSER.md 全文（上限 1375 字符）\n─────────────────────\n外部 Provider 静态说明块\n仅描述'你有 mem0/honcho 等记忆'，非实际记忆内容\n实际记忆内容在每轮 user消息末尾动态注入，不在此处"]
+
+        L5["⑤ 技能索引（两级缓存）\n~/.hermes/skills/ 所有技能\n每个技能一行：名称 + 一句话描述\n完整 SKILL.md 内容不在此处，LLM 按需skill_view 加载\n─────────────────────\n缓存：进程内LRU dict →磁盘 snapshot → 冷启动全量扫描"]
+
+        L6["⑥ 上下文文件（四选一，首个命中停止）\n① .hermes.md / HERMES.md → 向上查至 git root\n② AGENTS.md / agents.md → 仅 cwd\n③ CLAUDE.md / claude.md → 仅 cwd\n④ .cursorrules / .cursor/rules/*.mdc → 仅 cwd\n每份上限 20000 字符，超出做头尾截断\n（SOUL.md 已在①层加载时，此处跳过 SOUL.md）"]
+
+        L7["⑦ 元信息\n会话开始时间戳（构建时冻结）\nSession ID /模型名/ Provider\n+ 平台专用格式提示PLATFORM_HINTS\n（telegram/discord/slack/cli 等各有不同格式说明）"]
+
+        L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7
+    end
+
+    subgraph EPHEMERAL["每轮 API 调用时动态追加（不进缓存，不存轨迹）"]
+        L8["⑧ ephemeral_system_prompt\nCLI --system 参数传入\n或 gateway config.yaml agent.system_prompt\n或 gateway 平台上下文（如'你在 Telegram'）\n以上多个来源会先合并再追加\n─────────────────────\n追加方式：effective = cached + ephemeral\n不修改 _cached_system_prompt 本身不破坏 prefix cache"]
+    end
+
+    subgraph COMPRESS["上下文压缩时（会话内唯一重建时机）"]
+        REBUILD["_cached_system_prompt 清空\n重新调用 _build_system_prompt()\n此时距上次构建后写入的新记忆才进入快照\nAgent 对象原地复用，不重建"]
+    end
+
+    BUILD --> CACHED
+    CACHED --> EPHEMERAL
+    COMPRESS -. "压缩后重建 _cached_system_prompt" .-> CACHED
+```
 
 ### ▎工程细节：内存缓存 + SQLite 双层保障
 
@@ -109,7 +204,32 @@ Gateway 消息处理路径（每条消息新建 AIAgent）：
 
 ### 为什么记忆写入当前会话不生效？
 
-*[嵌入图表]*
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Agent as AIAgent
+    participant DB as SQLite
+    participant Disk as MEMORY.md
+
+    User->>Agent: 会话第 1 轮消息
+    Agent->>DB: 读取 system_prompt 快照（无）
+    Agent->>Disk: 读取 MEMORY.md（v1）
+    Agent->>DB: 写入 system_prompt 快照
+    Note over Agent: system = "...v1 记忆..."
+    Agent-->>User: 回复
+
+    User->>Agent: 会话第 3 轮消息
+    Agent->>Disk: memory("add", "新知识")
+    Disk-->>Agent: 写入成功
+    Note over Agent: ⚠️ system prompt 不变！\n新知识本轮不生效
+    Agent-->>User: 回复（基于 v1 记忆）
+
+    User->>Agent: 下一次全新会话
+    Agent->>DB: 读取 system_prompt 快照（无新会话）
+    Agent->>Disk: 重新读取 MEMORY.md（v2，含新知识）
+    Note over Agent: system = "...v2 记忆..."✅
+    Agent-->>User: 回复（基于 v2 记忆）
+```
 
 这是"冻结快照"设计的直接结果：记忆写入立即落盘，但当前会话的 system prompt 不变。唯一例外是上下文压缩触发后，`_invalidate_system_prompt_cache()` 会清空缓存并重读磁盘，重建时把新记忆带入新 session 的 system。
 
@@ -121,7 +241,31 @@ Gateway 消息处理路径（每条消息新建 AIAgent）：
 
 ### 每轮循环内部流程
 
-*[嵌入图表]*
+```mermaid
+flowchart LR
+    A["messages（持久历史）"] --> B["构建 api_messages\n（临时副本，不修改原始）"]
+
+    subgraph B["构建 api_messages"]
+        B1["复制消息，删除内部字段\nreasoning / finish_reason 等"]
+        B2["当前轮 user 消息末尾\n追加外置记忆 prefetch 结果"]
+        B3["头部插入 system prompt\n+ ephemeral_system_prompt"]
+        B4["apply_anthropic_cache_control()\n注入 4 个 cache_control 断点"]
+        B5["_sanitize_api_messages()\n修复孤儿 tool 结果"]
+    end
+
+    B --> C["LLM API Call\n_interruptible_api_call()"]
+
+    C --> D{响应类型}
+    D -->|"有 tool_calls"| E["_execute_tool_calls()"]
+    D -->|"纯文本"| F["final_response\n退出循环"]
+
+    E --> E1{并行还是串行?}
+    E1 -->|"全是只读工具"| E2["ThreadPoolExecutor\n最多 3 并发"]
+    E1 -->|"含写操作 / clarify"| E3["顺序串行执行"]
+    E2 --> E4["追加 tool 结果\n到 messages"]
+    E3 --> E4
+    E4 --> END
+```
 
 ### ▎IterationBudget：防死循环的预算计数器
 
@@ -209,7 +353,21 @@ if budget_warning and messages[-1].get("role") == "tool":
 
 ### 工具执行流程
 
-*[嵌入图表]*
+```mermaid
+flowchart TD
+    A["assistant_message.tool_calls"] --> B["_cap_delegate_task_calls()\n最多 3 个子 Agent 并发"]
+    B --> C["_deduplicate_tool_calls()\n去除重复调用"]
+    C --> D["_repair_tool_call()\n模糊匹配修正拼写错误"]
+    D --> E{危险命令?}
+    E -->|是| F["approval.py 拦截\n等待用户确认"]
+    E -->|否| G["handle_function_call()\nregistry.dispatch()"]
+    F -->|批准| G
+    G --> H["工具返回 JSON 字符串"]
+    H --> I["追加 tool 结果到 messages"]
+    I --> J{execute_code 单独调用?}
+    J -->|是| K["iteration_budget.refund()\n退还迭代预算\n（脚本执行不算 LLM 推理次数）"]
+    J -->|否| L["检查 token 计数\n是否超过压缩阈值"]
+```
 
 ### ▎并行 vs 串行：四层决策规则
 
@@ -360,7 +518,16 @@ self.max_summary_tokens = min(
 
 **是什么**：上下文压缩会丢弃中间轮次的对话细节。为了不让重要知识随压缩消失，Hermes 在压缩前强制触发记忆 flush——启动一个临时辅助 Agent，只暴露 `memory` 和 `skill_manage` 两个工具，让它主动把重要信息写到磁盘。
 
-*[嵌入图表]*
+```mermaid
+flowchart LR
+    A["即将进行上下文压缩"] --> B["flush_memories(min_turns=0)\n强制执行，不等轮次条件"]
+    B --> C["在 messages 末尾追加临时 flush 提示\n'Review conversation, save important facts...'"]
+    C --> D["调用辅助 LLM\n只暴露 memory 工具（其他工具移除）"]
+    D --> E["LLM 判断哪些内容值得保存"]
+    E --> F["memory() 工具写入 MEMORY.md / USER.md"]
+    F --> G["清理临时消息\n用 sentinel 标记找边界后 pop 掉"]
+    G --> H["正式执行上下文压缩"]
+```
 
 ### [自动技能生成（Skill Nudge）](./04-技能系统-注册发现与调用.md)
 
@@ -389,7 +556,24 @@ _iters_since_skill += 1  （每次 API call 前累加）
 
 ### 三种退出路径
 
-*[嵌入图表]*
+```mermaid
+flowchart TD
+    A{退出原因} --> B["路径 A：正常退出\nassistant_message 无 tool_calls\nfinish_reason = stop"]
+    A --> C["路径 B：预算耗尽\napi_call_count >= max_iterations（默认 90）\n调一次'无工具'LLM 生成摘要回复"]
+    A --> D["路径 C：用户中断\n_interrupt_requested = True\nreturned with completed=False"]
+
+    B --> E["后处理"]
+    C --> E
+    D --> E
+
+    subgraph E["回复后处理"]
+        E1["_strip_think_blocks()\n删除 <think>...</think> 推理块\n不暴露给用户"]
+        E2["_save_trajectory()\n可选，写轨迹文件（用于训练/调试）"]
+        E3["_persist_session()\n写 JSON 日志 + SQLite"]
+    end
+
+    E --> F["返回\n{final_response, messages, api_calls, completed}"]
+```
 
 ## 关键设计不变量
 

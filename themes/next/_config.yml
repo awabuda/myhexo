@@ -760,7 +760,7 @@ vendors:
 
   # Internal version: 4.6.2
   # See: http://fontawesome.io/
-  fontawesome:
+  fontawesome: //cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css
 
   # Internal version: 1
   # https://www.algolia.com
@@ -827,3 +827,8 @@ tag_cloud:
 diy_clock:
   clock: true # 粒子时钟
   runtime: true 
+# Mermaid
+mermaid:
+  enable: true
+  theme: default
+  cdn: https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js

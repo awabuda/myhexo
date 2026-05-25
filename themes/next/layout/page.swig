@@ -26,7 +26,7 @@
       {#################}
       {### PAGE BODY ###}
       {#################}
-      <div class="post-body{% if theme.han %} han-init-context{% endif %}{% if page.direction && page.direction.toLowerCase() === 'rtl' %} rtl{% endif %}">
+      <div class="post-body{% if theme.han %} han-init-context{% endif %}{% if page.direction and page.direction.toLowerCase() === 'rtl' %} rtl{% endif %}">
         {# tagcloud page support #}
         {% if page.type === "tags" %}
           <div class="tag-cloud">
@@ -57,6 +57,11 @@
     {######################}
     {### END PAGE BLOCK ###}
     {######################}
+
+    {% if page.path.indexOf('/books/hermes/') == 0 and page.path != '/books/hermes/index.html' %}
+      {% include '_partials/book-nav.swig' %}
+    {% endif %}
+
   </div>
 
 {% endblock %}

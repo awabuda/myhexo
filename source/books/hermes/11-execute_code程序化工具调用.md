@@ -1,3 +1,14 @@
+---
+title: 十一、execute_code程序化工具调用
+permalink: /books/hermes/11-execute_code程序化工具调用/
+comments: false
+prev: 10-危险命令审批与检查点回滚
+next: 12-智能路由凭据池与错误恢复
+prev_title: 十、危险命令审批与检查点回滚
+next_title: 十二、智能路由凭据池与错误恢复
+---
+
+
 # 十一、execute_code（程序化工具调用待验证）
 
 > **结论先行**：`execute_code` 是 Hermes 的"批处理加速器"。传统 ReAct 循环中，LLM 每次只能调用一个工具，N 步操作需要 N 次 LLM inference。PTC（Programmatic Tool Calling）模式让 LLM 写一段 Python 脚本，脚本通过 RPC 批量调用工具，**N 步只需 1 次 LLM 推理**，中间工具结果不进入 context window，大幅降低成本和延迟。
@@ -25,7 +36,24 @@ PTC 模式（N 步只需 1 次 LLM 推理）：
 
 ## 11.2 完整执行流程
 
-*[嵌入图表]*
+```mermaid
+flowchart TD
+    A["terminal(command)"] --> B["_normalize_command_for_detection()"]
+    B --> C["detect_dangerous_command()"]
+    C --> D{命中危险模式?}
+    D -->|否| E["直接执行"]
+    D -->|是| F{在白名单中?}
+    F -->|是: 永久/会话已批| E
+    F -->|否| G{运行环境}
+    G -->|CLI| H["阻塞等待用户输入<br/>o/s/a/d"]
+    G -->|Gateway| I["发送审批请求到用户<br/>阻塞线程等待按钮"]
+    H --> J{用户选择}
+    I --> J
+    J -->|once| E
+    J -->|session| K["记录到会话白名单"] --> E
+    J -->|always| L["写入 config.yaml<br/>command_allowlist"] --> E
+    J -->|deny| M["返回拒绝错误"]
+```
 
 ## 11.3 两种传输模式
 

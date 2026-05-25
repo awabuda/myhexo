@@ -1,3 +1,14 @@
+---
+title: 八、子Agent委托
+permalink: /books/hermes/08-子Agent委托/
+comments: false
+prev: 07-Prompt拼接机制
+next: 09-MCP客户端集成
+prev_title: 七、Prompt拼接机制
+next_title: 九、MCP客户端集成
+---
+
+
 # 八、子 Agent 委托（delegate_task）
 
 > **结论先行**：`delegate_task` 是 Hermes 的"任务外包"机制。父 Agent 遇到复杂子任务时，通过 `delegate_task` 生成一个独立的子 AIAgent，让它单独完成一段 ReAct 循环，最终只把摘要结果汇报给父 Agent。父 Agent 的上下文窗口只看到"委托了什么 + 得到什么结果"，子 Agent 产生的数十次工具调用全部被隔离，不污染父 Agent 的 context。
@@ -18,7 +29,29 @@
 
 ## 8.2 完整委托流程
 
-*[嵌入图表]*
+```mermaid
+sequenceDiagram
+    participant P as 父 Agent ReAct 循环
+    participant D as delegate_task()
+    participant C as 子 AIAgent
+    participant T as 工具层
+
+    P->>D: delegate_task(goal="分析性能瓶颈", context="...")
+    D->>D: ① 检查 depth < MAX_DEPTH(2)
+    D->>D: ② 保存父工具名快照（进程全局变量）
+    D->>C: ③ 主线程构建子 AIAgent
+    note over C: skip_memory=True<br/>skip_context_files=True<br/>blocked_tools 已剥除
+    D->>D: ④ 恢复父工具名快照
+    D->>C: ⑤ child.run_conversation(goal)
+    loop 子 Agent ReAct 循环
+        C->>T: 调用工具（search_files/read_file/terminal...）
+        T-->>C: 工具结果（不进父 context）
+        C->>P: 进度回调（工具名/推理片段）
+    end
+    C-->>D: final_response（摘要）
+    D-->>P: JSON {results: [{status, summary, tool_trace...}]}
+    note over P: 父 context 只追加这一条 JSON
+```
 
 ---
 
